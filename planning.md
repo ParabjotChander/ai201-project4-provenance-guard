@@ -18,9 +18,9 @@ Sentence Length Variance: AI writing tends to be more uniform. Human writing is 
 
 Type-Token Ratio: unique words / total words, AI text repeats common phrases; human writing is more lexically diverse.
 
-Punctuation density: AI text has lower punctuation variation per sentence; human writing, especially informal — uses it expressively.
+Punctuation Variation: AI text has lower punctuation variation per sentence; human writing, especially informal — uses it expressively.
 
-Output: Dictionary containing transparency label, stylometric confidence score, normalized user text
+Output: Dictionary containing classification, stylometric confidence score, raw text
 
 ### Combining Confidence Scores  
 I will take average confidence scores: LLM_score + Stylometric_score / 2 \
@@ -33,9 +33,9 @@ What does a confidence score of 0.6 mean to your system? How will you map raw si
 0.6 confidence score means high confidence
 
 Confidence Score: Range is 0.0 to 1.0 (float number) \
-0.0-0.49 => low confidence \
-0.5-0.59 => Uncertain \
-0.6-1.0 => High confidence 
+0.0-0.39 => Likely Human \
+0.4-0.69 => Uncertain \
+0.61-1.0 => Likely AI  
 
 ## Transparency label design:
 <!-- 
@@ -131,13 +131,13 @@ Raw Text
 | Groq Signal    |
 +----------------+
        |
-       +---- classify, confidence score
+       +---- confidence score
        |
 +----------------+
 | Stylometry     |
 +----------------+
        |
-       +---- classify, confidence score
+       +---- confidence score
        |
 Confidence Engine
        |
