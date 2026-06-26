@@ -6,9 +6,17 @@ from flask_limiter.util import get_remote_address
 from datetime import datetime, timezone
 from config import LOG_PATH
 from signal1 import signal1_response
+from signal2 import signal2_response
+from confidence_score import compute_confidence_score
 
 # Content ID: a05bc3f5-ee58-4409-a443-873393ff0bf4
 # 10563a28-820e-4255-81c1-baa11a25c233
+
+transparency_labels = {
+    "Likely Human": "This content appears to be human-written with high confidence.",
+    "Uncertain": "The system could not confidently determine the origin of this content.",
+    "Likely AI": "This content was classified as AI-generated with high confidence"
+}
 
 app = Flask(__name__)
 
@@ -36,21 +44,37 @@ def submit():
     s1_attribution = s1_output['classification']
     s1_score = s1_output['llm_confidence_score']
     
+    s2_output = signal2_response(text)
+    s2_score = s2_output['stylometric_score']
 
+    confidence = compute_confidence_score(s1_score, s2_score)
+
+    overall_attribution = ""
+
+    if confidence <= 0.39:
+        overall_attribution = "Human Likely"
+    elif 0.40 <= confidence <= 0.60:
+        overall_attribution = "Uncertain"
+    else:
+        overall_attribution = "AI Likely"
+    
     log_entry = {
-        "timestamp": "...",
         "content_id": content_id,
         "creator_id": creator_id,
-        "attribution": s1_attribution,
-        "signal_1_score": s1_score 
+        "timestamp": "...",
+        "attribution": overall_attribution,
+        "confidence": confidence,
+        "llm_score": s1_score,
+        "stylometric_score": s2_score,
+        "status": "classified" 
     }
 
     log_event(log_entry)
 
     return jsonify({
         "content_id": content_id,
-        "attribution": s1_attribution,
-        "confidence": 0.5,
+        "attribution": overall_attribution,
+        "confidence": confidence,
         "label": "We're not sure who wrote this.",
     })
 

@@ -10,9 +10,9 @@ def signal2_response(text: str) -> dict:
         "input": text
     }
     
-    # Type Token Ratio Computed 
+    # Type Token Ratio 
     # 1. Clean the text: lowercase it and remove punctuation
-    cleaned_text = text.lower().translate(str.maketrans("", "", string.punctuation)).split()
+    cleaned_text = text.lower().translate(str.maketrans("", "", string.punctuation))
 
     # 2. Split into a list of words
     words = cleaned_text.split()
@@ -26,34 +26,37 @@ def signal2_response(text: str) -> dict:
 
     ttr = unique_words / total_words if total_words > 0 else 0
 
-    print(f"Unique words (Types): {unique_words}, Total words (Tokens): {total_words}, Type-Token Ratio (TTR): {ttr:.4f}")
+    #print(f"Unique words (Types): {unique_words}, Total words (Tokens): {total_words}, Type-Token Ratio (TTR): {ttr:.4f}")
     
     # Sentence Length Variation
     # 1. Split the text into sentences using regex (splits on ., !, or ? followed by a space or end of string)
     # The [?!.] matches any of those punctuation marks, and \s* handles trailing spaces.
     sentences = [s.strip() for s in re.split(r'[?!.]\s*', text) if s.strip()]
-
+    total_sentences = len(sentences)
     # 2. Calculate the length of each sentence (number of characters)
     # We use a dictionary (Counter) to track the frequencies of these lengths.
     sentence_lengths = [len(sentence) for sentence in sentences]
     length_frequencies = Counter(sentence_lengths)
 
     # 3. Display the results nicely, sorted by sentence length
+    '''
     print(f"{'Sentence Length':<20} | {'Frequency':<10}")
     print("-" * 35)
     for length in sorted(length_frequencies.keys()):
         print(f"{length:<20} | {length_frequencies[length]:<10}")
-
+    '''
     #(Standard Deviation)
     if len(sentence_lengths) > 1:
         mean_len = sum(sentence_lengths) / len(sentence_lengths)
         variance = sum((x - mean_len) ** 2 for x in sentence_lengths) / len(sentence_lengths)
         std_dev = variance ** 0.5
-        print( "\n" + "-" * 35)
-        print(f"Average Sentence Length: {mean_len:.2f} chars")
-        print(f"Sentence Length Variation (Std Dev): {std_dev:.2f}")
+        #print( "\n" + "-" * 35)
+        #print(f"Average Sentence Length: {mean_len:.2f} chars")
+        #print(f"Sentence Length Variation (Std Dev): {std_dev:.2f}")
+    else:
+        std_dev = 0.0
 
-    #  Length Variation
+    # Punctuation Variation
     # 1. Define what counts as punctuation
     # string.punctuation includes: !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
     punctuation_set = set(string.punctuation)
@@ -69,11 +72,12 @@ def signal2_response(text: str) -> dict:
     punc_frequencies = Counter(punctuation_counts)
 
     # 4. Display the dictionary results
+    '''
     print(f"{'Punctuation Count':<20} | {'Sentence Frequency':<10}")
     print("-" * 38)
     for count in sorted(punc_frequencies.keys()):
         print(f"{count:<20} | {punc_frequencies[count]:<10}")
-
+    '''
     # 5. Calculate the Standard Deviation Metric
     if len(punctuation_counts) > 1:
         mean_punc = sum(punctuation_counts) / len(punctuation_counts)
@@ -84,76 +88,117 @@ def signal2_response(text: str) -> dict:
         # Standard deviation is the square root of variance
         std_dev_punc = variance ** 0.5
     
-        print("\n" + "-" * 38)
-        print(f"Average Punctuation/Sentence: {mean_punc:.2f}")
-        print(f"Punctuation Variation (Std Dev): {std_dev_punc:.2f}")
+        # print("\n" + "-" * 38)
+        # print(f"Average Punctuation/Sentence: {mean_punc:.2f}")
+        #print(f"Punctuation Variation (Std Dev): {std_dev_punc:.2f}")
+    else:
+        std_dev_punc = 0.0
+    
+    score, classification = calculate_stylometric_score(ttr, std_dev, std_dev_punc, total_words, total_sentences)
     
     return {
-        "classification": "uncertain",
-        "stylometric_score": 0.5,
+        "classification": classification,
+        "stylometric_score": score,
         "input": text
     }
 
-def calculate_stylometric_score(ttr, sentence_sd, punc_sd):
+def calculate_stylometric_score(ttr, sentence_sd, punc_sd, total_words, total_sentences):
     """
     Combines TTR, Sentence SD, and Punctuation SD into a 0.0 - 1.0 AI-likelihood score.
     Higher score = lower variation = Higher AI likelihood.
     """
-    # 1. Define typical human baselines for normalization (Min, Max)
-    # These bounds map raw scores onto a uniform 0.0 to 1.0 scale.
-    ttr_bounds = (0.3, 0.8)       # AI often clusters low; diverse human text goes high
-    sent_bounds = (2.0, 25.0)     # Standard deviation of sentence character lengths
-    punc_bounds = (0.1, 2.5)      # Standard deviation of punctuation counts
+    # 1. DYNAMIC BOUNDS ADJUSTMENT
+    if total_words < 75 or total_sentences <= 3:
+        # SHORT TEXT SETTINGS
+        # TTR is naturally much higher in short texts
+        ttr_bounds = (0.65, 0.95)       
+        
+        # Sentence length SD swings wildly; we widen the expected human variance 
+        # so normal AI variance doesn't look overly impressive.
+        sent_bounds = (5.0, 35.0)      
+        
+        # Short texts have very little room for punctuation variety. 
+        # We lower the human baseline so even a tiny bit of variation counts as human.
+        punc_bounds = (0.0, 1.2)       
+        
+        # Short texts make vocabulary unreliable, so we heavily favor punctuation uniformity
+        weights = {'ttr': 0.20, 'sentence': 0.35, 'punctuation': 0.45}
+        
+    else:
+        # LONG TEXT SETTINGS (Standard baselines)
+        ttr_bounds = (0.30, 0.80)
+        sent_bounds = (2.0, 25.0)
+        punc_bounds = (0.1, 2.5)
+        weights = {'ttr': 0.35, 'sentence': 0.40, 'punctuation': 0.25}
 
+    # 2. NORMALIZATION AND INVERSION FUNCTION
     def normalize_and_invert(val, bounds):
-        # Clip values to bounds so we don't exceed 0 or 1
         val = max(bounds[0], min(val, bounds[1]))
-        # Standard Min-Max formula: (val - min) / (max - min)
         normalized = (val - bounds[0]) / (bounds[1] - bounds[0])
-        # Invert it: High variation (Human) becomes close to 0, Low variation (AI) becomes close to 1
-        return 1.0 - normalized
+        return 1.0 - normalized  # Invert so 1.0 = AI Likely (Low Variation)
 
-    # 2. Normalize and invert all three metrics
+    # 3. Process Scores
     ttr_score = normalize_and_invert(ttr, ttr_bounds)
     sent_score = normalize_and_invert(sentence_sd, sent_bounds)
     punc_score = normalize_and_invert(punc_sd, punc_bounds)
 
-    # 3. Apply weights based on feature reliability
-    # TTR and Sentence Structure are historically the strongest indicators
-    weights = {
-        'ttr': 0.35,
-        'sentence': 0.40,
-        'punctuation': 0.25
-    }
-
-    final_score = (
+    # 4. Calculate Weighted Average
+    score = (
         (ttr_score * weights['ttr']) +
         (sent_score * weights['sentence']) +
         (punc_score * weights['punctuation'])
     )
 
-    # 4. Determine Classification Category
+    final_score = round(score, 2)
+    
+    # 5. Categorize
     if final_score <= 0.39:
-        category = "Human Likely"
+        category = "Likely Human"
     elif 0.40 <= final_score <= 0.60:
         category = "Uncertain"
     else:
-        category = "AI Likely"
+        category = "Likely AI"
 
     return final_score, category
 
 
-# --- EXAMPLE RUNS ---
-
-# Example A: High variation across the board (Typical human text)
-metrics_human = {"ttr": 0.72, "sentence_sd": 18.4, "punc_sd": 1.6}
-score, cat = calculate_stylometric_score(**metrics_human)
-print(f"Human Sample -> Score: {score:.2f} | Classification: {cat}")
-
-# Example B: Uniform, repetitive variation (Typical AI text)
-metrics_ai = {"ttr": 0.41, "sentence_sd": 4.1, "punc_sd": 0.2}
-score, cat = calculate_stylometric_score(**metrics_ai)
-print(f"AI Sample    -> Score: {score:.2f} | Classification: {cat}")
-
 if __name__ == "__main__":
     print("Signal 2 Testing")
+    ''''
+    metrics_human = {"ttr": 0.72, "sentence_sd": 18.4, "punc_sd": 1.6}
+    score, cat = calculate_stylometric_score(metrics_human["ttr"], metrics_human['sentence_sd'], metrics_human['punc_sd'])
+    print(f"Human Sample -> Score: {score:.2f} | Classification: {cat}")
+
+    # Example B: Uniform, repetitive variation (Typical AI text)
+    metrics_ai = {"ttr": 0.41, "sentence_sd": 4.1, "punc_sd": 0.2}
+    score, cat = calculate_stylometric_score(metrics_ai['ttr'], metrics_ai['sentence_sd'], metrics_ai["punc_sd"])
+    print(f"AI Sample -> Score: {score:.2f} | Classification: {cat}")
+    
+    Output: 
+    Signal 2 Testing
+    Human Sample -> Score: 0.26 | Classification: Likely Human
+    AI Sample -> Score: 0.88 | Classification: Likely AI
+    '''
+    '''
+    test_string0 = ""
+    signal2_test0 = signal2_response(test_string0)
+    print(signal2_test0["classification"], signal2_test0["stylometric_score"])
+    '''
+    # Human Response
+    print("Human Response-Boundary, may detect AI due to less variation")
+    test_string = "The sun dipped below the horizon, painting the sky in hues of amber and rose. I sat on the porch, coffee in hand, watching the neighborhood slowly go quiet."
+    signal2_test1 = signal2_response(test_string)
+    print(signal2_test1["classification"], signal2_test1["stylometric_score"])
+    
+    print("\n")
+
+    # AI response
+    print("Clear AI Response")
+    test_string2 = """
+    Discover the future of everyday convenience with our revolutionary smart-home device. 
+    Seamlessly designed to integrate into your busy lifestyle, this product harnesses advanced automation to save you time and energy. 
+    Whether you are managing your daily schedule or enjoying a quiet evening, our innovation ensures a truly elevated experience.
+    """
+    signal2_test2 = signal2_response(test_string2)
+    print(signal2_test2["classification"], signal2_test2["stylometric_score"])
+    
