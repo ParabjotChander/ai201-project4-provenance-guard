@@ -234,7 +234,7 @@ User
     |
 POST /appeal
     |
-Appeal Text/Reason
+Appeal Reason and Content ID
     |
 Status = Under Review
     |
