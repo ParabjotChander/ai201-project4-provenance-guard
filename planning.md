@@ -34,7 +34,7 @@ What does a confidence score of 0.6 mean to your system? How will you map raw si
 
 Confidence Score: Range is 0.0 to 1.0 (float number) \
 0.0-0.39 => Likely Human \
-0.4-0.69 => Uncertain \
+0.4-0.60 => Uncertain \
 0.61-1.0 => Likely AI  
 
 ## Transparency label design:
