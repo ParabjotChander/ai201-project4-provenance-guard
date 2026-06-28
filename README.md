@@ -7,7 +7,7 @@ Principles:
 
 Creator Protection: Safeguarding the intellectual property and visibility of human artists, writers, and musicians.
 
-Platform Trust: Maintaining ecosystem integrity by ensuring content transparency.Audience 
+Platform Trust: Maintaining ecosystem integrity by ensuring content transparency.
 
 Context: Providing consumers with clear, verifiable information regarding the origin of digital assets.
 
@@ -363,5 +363,6 @@ def read_log(limit=20):
     return [json.loads(line) for line in lines[-limit:]]
 ```
 
-## Demo Video URL: 
+## Demo Video URL:
+https://youtu.be/ZTSj1-W0EmY  
 
